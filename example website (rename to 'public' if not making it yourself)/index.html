@@ -1,1 +1,281 @@
-/Users/icelk/dev/Rust/icelk.dev/public/articles/to-do.html
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>To-do list</title>
+        <style>
+            .remove {
+                cursor: pointer;
+            }
+            .remove.disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .item {
+                font-size: 1.3em;
+                padding: 0.2rem;
+                margin: 0 0.5rem;
+
+                display: flex;
+                align-items: center;
+            }
+            .item > input[type="text"] {
+                width: 100%;
+            }
+            .item > input[type="checkbox"] {
+                height: 1.5em;
+                width: 1.5em;
+                flex-shrink: 0;
+            }
+            .item > input {
+                font-size: inherit;
+                padding: 0.1rem;
+            }
+            .item > span {
+                font-size: 1.2em;
+            }
+            .item > * {
+                margin: 0 0.2rem;
+            }
+
+            body {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                background-color: black;
+                color: white;
+            }
+            #list {
+                width: max(10rem, 50%);
+                padding: 0.75rem;
+            }
+        </style>
+    </head>
+    <body>
+        <input id="idInput" type="text" placeholder="ID" />
+        <div id="list">
+            <div id="to-do-items">
+                <!-- Items -->
+            </div>
+            <div id="new-item" class="item">
+                <input
+                    type="text"
+                    id="new-item-name"
+                    placeholder="Add new item..."
+                />
+            </div>
+            <hr />
+            <div id="done-items">
+                <!-- Items which are checked -->
+            </div>
+
+            <script>
+                let todoItems = document.getElementById("to-do-items")
+                let newItemName = document.getElementById("new-item-name")
+                let doneItems = document.getElementById("done-items")
+                let idInput = document.getElementById("idInput")
+                let changedSinceLastRequest = false
+                let serverResponded = true
+
+                setInterval(async () => {
+                    if (!serverResponded) {
+                        return
+                    }
+                    if (changedSinceLastRequest) {
+                        let data = saveList()
+                        // Reset value
+                        changedSinceLastRequest = false
+
+                        serverResponded = false
+
+                        let id = idInput.value
+
+                        let response = await fetch("/list?id=" + id, {
+                            method: "PUT",
+                            body: JSON.stringify(data),
+                        })
+
+                        if (!response.ok) {
+                            alert("name contains invalid characters")
+                        }
+
+                        serverResponded = true
+                    }
+                }, 250)
+
+                idInput.addEventListener("change", () => {
+                    let id = idInput.value
+                    localStorage.setItem("id", id)
+                    loadListFromServer(id)
+                })
+
+                newItemName.addEventListener("input", () => {
+                    let newItem = addItem(newItemName.value)
+                    newItemName.value = ""
+                    newItem.focus()
+                })
+
+                function addItem(value) {
+                    let item = document.createElement("div")
+                    item.classList.add("item")
+
+                    let name = document.createElement("input")
+                    name.type = "text"
+                    name.placeholder = "Item"
+                    name.value = value
+                    name.addEventListener("change", () => {
+                        saveListToServer()
+                    })
+
+                    let completed = document.createElement("input")
+                    completed.type = "checkbox"
+
+                    completed.addEventListener("change", () => {
+                        let done = completed.checked
+
+                        item.parentElement.removeChild(item)
+
+                        if (done) {
+                            doneItems.appendChild(item)
+                        } else {
+                            todoItems.appendChild(item)
+                        }
+
+                        name.disabled = done
+                        remove.classList.toggle("disabled")
+                    })
+                    completed.addEventListener("change", () => {
+                        saveListToServer()
+                    })
+
+                    let remove = document.createElement("span")
+                    remove.innerText = "✘"
+                    remove.classList.add("remove")
+                    remove.setAttribute("tabindex", "0")
+
+                    remove.addEventListener("click", () => {
+                        if (!remove.classList.contains("disabled")) {
+                            item.remove()
+                        }
+                    })
+                    remove.addEventListener("click", () => {
+                        saveListToServer()
+                    })
+
+                    item.appendChild(name)
+                    item.appendChild(completed)
+                    item.appendChild(remove)
+
+                    todoItems.appendChild(item)
+
+                    return name
+                }
+
+                function saveList() {
+                    let todoChildren = todoItems.children
+                    let doneChildren = doneItems.children
+
+                    // Here, we create a object called data with two properties, a list named todo and another list named done.
+                    let data = {
+                        todo: [],
+                        done: [],
+                    }
+
+                    // A function within a function to add all values of the inputs of `children` to the `list`
+                    function addNameToList(list, children) {
+                        // This is a loop. Type `for` and press tab to make the loop appear.
+                        // Here, we can't use `children.forEach` because of some weird JS standards.
+
+                        // let i = 0 declares i to be 0
+                        // the loop will continue as long as `i < children.length`
+                        // (this can be tricky if you remove items from the children list in the loop, then the child count is lowered.)
+                        // `i++` increases i by one at the end of each iteration (each time the code inside is ran).
+                        for (let i = 0; i < children.length; i++) {
+                            // Get a refernce to the child.
+                            // `children` is a array-like object, which means we can access the item at position i with this syntax.
+                            let child = children[i]
+
+                            // Gets the first child, which is the input
+                            let input = child.firstElementChild
+
+                            let name = input.value
+
+                            // `array.push` adds to the end of the list
+                            list.push(name)
+                        }
+                    }
+
+                    addNameToList(data.todo, todoChildren)
+                    addNameToList(data.done, doneChildren)
+
+                    // The `data` object now contains all the names.
+                    // To store it as a string, we're going to have to serialize it.
+                    // This can easily be achieved by using `JSON.stringify()`
+
+                    let string = JSON.stringify(data)
+
+                    localStorage.setItem("savedList", string)
+
+                    return data
+                }
+                function saveListToServer() {
+                    changedSinceLastRequest = true
+                }
+
+                function clearChildren(element) {
+                    while (element.firstChild) {
+                        element.removeChild(element.lastChild)
+                    }
+                }
+
+                function loadList(data) {
+                    if (data.todo != undefined) {
+                        data.todo.forEach((todoItem) => {
+                            addItem(todoItem)
+                        })
+                    }
+
+                    if (data.done != undefined) {
+                        data.done.forEach((doneItem) => {
+                            let input = addItem(doneItem)
+                            let itemContainer = input.parentElement
+
+                            // This moves the item from the `todoItems` container to `doneItems`.
+                            itemContainer.parentElement.removeChild(
+                                itemContainer
+                            )
+                            doneItems.appendChild(itemContainer)
+
+                            // This disabled input
+                            input.disabled = true
+                            itemContainer.children[1].checked = true
+                            itemContainer.children[2].classList.add("disabled")
+                        })
+                    }
+                }
+                async function loadListFromServer(id) {
+                    let response = await fetch("/list?id=" + id)
+
+                    if (!response.ok) {
+                        alert("id contains invalid bytes, can't fetch list")
+                    }
+
+                    let string = await response.text()
+                    let data = JSON.parse(string)
+
+                    clearChildren(todoItems)
+                    clearChildren(doneItems)
+                    loadList(data)
+                }
+
+                let savedId = localStorage.getItem("id")
+
+                if (savedId != null) {
+                    loadListFromServer(savedId)
+                    idInput.value = savedId
+                }
+            </script>
+        </div>
+    </body>
+</html>
