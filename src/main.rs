@@ -1,6 +1,6 @@
 use kvarn::prelude::*;
 
-const DATA_DIR: &'static str = "data";
+const DATA_DIR: &str = "data";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -21,8 +21,8 @@ async fn main() {
                 return utility::default_error_response(StatusCode::BAD_REQUEST, host, None).await;
             }
 
-            match req.method() {
-                &Method::GET => {
+            match *req.method() {
+                Method::GET => {
                     async fn read_file(path: &Path) -> io::Result<Bytes> {
                         let mut file = tokio::fs::File::open(path).await?;
                         let mut buffer = BytesMut::with_capacity(4096);
@@ -47,7 +47,7 @@ async fn main() {
                         }
                     }
                 }
-                &Method::PUT => {
+                Method::PUT => {
                     async fn read_write_file(path: &Path, body: &mut application::Body) -> io::Result<()> {
                         let content = body.read_to_bytes().await?;
 
